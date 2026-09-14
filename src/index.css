@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.font-jua {
+  font-family: 'Jua', 'Noto Sans KR', sans-serif;
+}
+
+.font-dodum {
+  font-family: 'Gowun Dodum', 'Noto Sans KR', sans-serif;
+}
+
+/* Print optimizations for classroom bulletin board certificate */
+@media print {
+  body {
+    background: white !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+}

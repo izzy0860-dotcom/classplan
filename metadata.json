@@ -1,0 +1,6 @@
+{
+  "name": "교실에서 찾은 희망 실천 서약",
+  "description": "초등학교 4학년 교실에서 찾은 희망 8대 실천 카드를 전자칠판에서 직접 터치하며 투표하고, 우리 반 2학기 실천 약속에 손도장으로 다짐하는 참여형 플랫폼",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
