@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ActiveTab, PracticeCard, StudentVote, StudentPledge } from './types';
 import { PRACTICE_CARDS } from './data/cards';
 import { Header } from './components/Header';
@@ -7,7 +7,11 @@ import { VotingBoard } from './components/VotingBoard';
 import { PledgeCreator } from './components/PledgeCreator';
 import { PledgeWall } from './components/PledgeWall';
 import { CardDetailModal } from './components/CardDetailModal';
+import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { generateSampleVotes, generateSamplePledges } from './data/sampleData';
+import { getGoogleSheetsUrl, sendToGoogleSheets, fetchPledgesFromGoogleSheets } from './utils/googleSheets';
+
+const TOTAL_STUDENTS = 21;
 
 const STORAGE_KEYS = {
   TITLE: 'hope_class_title',
@@ -19,7 +23,7 @@ const STORAGE_KEYS = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('cards');
   const [classTitle, setClassTitle] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEYS.TITLE) || '4학년 2반';
+    return localStorage.getItem(STORAGE_KEYS.TITLE) || '4학년 우리 반';
   });
 
   const [votes, setVotes] = useState<StudentVote[]>(() => {
@@ -50,6 +54,12 @@ export default function App() {
   });
 
   const [activeDetailCard, setActiveDetailCard] = useState<PracticeCard | null>(null);
+  const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
+  const [isGoogleSheetsConnected, setIsGoogleSheetsConnected] = useState<boolean>(() => {
+    return !!getGoogleSheetsUrl();
+  });
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Sync with LocalStorage
   useEffect(() => {
@@ -70,6 +80,66 @@ export default function App() {
     }
   }, [selectedClassCardId]);
 
+  // Synchronize remote student pledges from Google Sheets so Chromebooks see other classmates' submissions
+  const handleSyncFromSheets = useCallback(async () => {
+    const url = getGoogleSheetsUrl();
+    if (!url) return;
+
+    setIsSyncing(true);
+    try {
+      const res = await fetchPledgesFromGoogleSheets(url);
+      if (res.success && res.pledges && res.pledges.length > 0) {
+        setPledges((prev) => {
+          const map = new Map<number, StudentPledge>();
+          // retain local items
+          prev.forEach((p) => map.set(p.studentNumber, p));
+
+          // merge remote items
+          res.pledges.forEach((rp, idx) => {
+            const sNum = rp.studentNumber || idx + 1;
+            const matchedCard =
+              PRACTICE_CARDS.find((c) => c.title === rp.cardTitle) ||
+              PRACTICE_CARDS.find((c) => c.id === selectedClassCardId) ||
+              PRACTICE_CARDS[0];
+
+            map.set(sNum, {
+              id: rp.id || `remote-pledge-${sNum}`,
+              studentNumber: sNum,
+              studentName: rp.studentName || `${sNum}번 학생`,
+              cardId: matchedCard.id,
+              pledgeText: rp.pledgeText || '',
+              stampColor: rp.stampColor || '#DC2626',
+              stampAngle: rp.stampAngle ?? (((sNum * 7) % 24) - 12),
+              handType: rp.handType || 'right',
+              timestamp: typeof rp.timestamp === 'number' ? rp.timestamp : Date.now(),
+            });
+          });
+
+          return Array.from(map.values()).sort((a, b) => a.studentNumber - b.studentNumber);
+        });
+        setLastSyncTime(new Date());
+      }
+    } catch (err) {
+      console.warn('Sync failed:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [selectedClassCardId]);
+
+  // Periodic polling every 8 seconds when Google Sheets is connected
+  useEffect(() => {
+    if (!isGoogleSheetsConnected) return;
+
+    // Initial sync on mount
+    handleSyncFromSheets();
+
+    const interval = setInterval(() => {
+      handleSyncFromSheets();
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [isGoogleSheetsConnected, handleSyncFromSheets]);
+
   // Vote Handlers
   const handleAddVote = (studentNumber: number, studentName: string, cardId: number) => {
     const newVote: StudentVote = {
@@ -84,6 +154,17 @@ export default function App() {
       const filtered = prev.filter((v) => v.studentNumber !== studentNumber);
       return [...filtered, newVote];
     });
+
+    // Auto-sync to Google Sheets in background if URL configured
+    const targetCard = PRACTICE_CARDS.find((c) => c.id === cardId);
+    sendToGoogleSheets({
+      action: 'vote',
+      classTitle,
+      studentNumber,
+      studentName: studentName || `${studentNumber}번 학생`,
+      cardId,
+      cardTitle: targetCard?.title || `실천 약속 ${cardId}`,
+    }).catch(() => {});
   };
 
   const handleResetVotes = () => {
@@ -105,6 +186,22 @@ export default function App() {
       const filtered = prev.filter((p) => p.studentNumber !== pledgeData.studentNumber);
       return [...filtered, newPledge];
     });
+
+    // Auto-sync to Google Sheets in background if URL configured
+    const targetCard = PRACTICE_CARDS.find((c) => c.id === pledgeData.cardId);
+    sendToGoogleSheets({
+      action: 'pledge',
+      classTitle,
+      studentNumber: pledgeData.studentNumber,
+      studentName: pledgeData.studentName || `${pledgeData.studentNumber}번 학생`,
+      cardTitle: targetCard?.title || '실천 약속',
+      pledgeText: pledgeData.pledgeText,
+      stampColor: pledgeData.stampColor,
+      handType: pledgeData.handType,
+    }).then(() => {
+      // Immediate pull after submission
+      handleSyncFromSheets();
+    }).catch(() => {});
   };
 
   const handleDeletePledge = (id: string) => {
@@ -141,6 +238,8 @@ export default function App() {
         onChangeClassTitle={setClassTitle}
         onFillSampleData={handleFillSampleData}
         onResetAllData={handleResetAllData}
+        onOpenGoogleSheetsModal={() => setIsGoogleSheetsModalOpen(true)}
+        isGoogleSheetsConnected={isGoogleSheetsConnected}
         totalVotesCount={votes.length}
         totalPledgesCount={pledges.length}
       />
@@ -169,7 +268,7 @@ export default function App() {
             onSelectClassPromise={handleSelectClassPromise}
             onGoToPledge={() => setActiveTab('pledge')}
             onOpenCardDetail={setActiveDetailCard}
-            totalStudentsCount={25}
+            totalStudentsCount={TOTAL_STUDENTS}
           />
         )}
 
@@ -181,7 +280,7 @@ export default function App() {
             onSavePledge={handleSavePledge}
             existingPledges={pledges}
             onGoToWall={() => setActiveTab('wall')}
-            totalStudentsCount={25}
+            totalStudentsCount={TOTAL_STUDENTS}
           />
         )}
 
@@ -193,6 +292,11 @@ export default function App() {
             pledges={pledges}
             onAddMorePledge={() => setActiveTab('pledge')}
             onDeletePledge={handleDeletePledge}
+            totalStudentsCount={TOTAL_STUDENTS}
+            onSyncFromSheets={handleSyncFromSheets}
+            isSyncing={isSyncing}
+            lastSyncTime={lastSyncTime}
+            isGoogleSheetsConnected={isGoogleSheetsConnected}
           />
         )}
       </main>
@@ -208,6 +312,19 @@ export default function App() {
           setSelectedClassCardId(card.id);
           setActiveTab('pledge');
         }}
+      />
+
+      {/* Google Sheets Integration & Sync Modal */}
+      <GoogleSheetsModal
+        isOpen={isGoogleSheetsModalOpen}
+        onClose={() => {
+          setIsGoogleSheetsModalOpen(false);
+          setIsGoogleSheetsConnected(!!getGoogleSheetsUrl());
+        }}
+        classTitle={classTitle}
+        votes={votes}
+        pledges={pledges}
+        cards={PRACTICE_CARDS}
       />
 
       {/* Classroom Footer (hidden on print) */}

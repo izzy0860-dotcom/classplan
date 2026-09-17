@@ -26,7 +26,7 @@ export const VotingBoard: React.FC<VotingBoardProps> = ({
   onSelectClassPromise,
   onGoToPledge,
   onOpenCardDetail,
-  totalStudentsCount = 25,
+  totalStudentsCount = 21,
 }) => {
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null);
   const [currentStudentNum, setCurrentStudentNum] = useState<number>(1);

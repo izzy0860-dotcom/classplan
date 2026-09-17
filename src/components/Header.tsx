@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ActiveTab } from '../types';
-import { LayoutGrid, Vote, Hand, TreeDeciduous, Volume2, VolumeX, Maximize2, Minimize2, Edit3, Check } from 'lucide-react';
+import { LayoutGrid, Vote, Hand, TreeDeciduous, Volume2, VolumeX, Maximize2, Minimize2, Edit3, Check, FileSpreadsheet } from 'lucide-react';
 import { playTapSound, setSoundEnabled, getSoundEnabled } from '../utils/sound';
 
 interface HeaderProps {
@@ -10,6 +10,8 @@ interface HeaderProps {
   onChangeClassTitle: (newTitle: string) => void;
   onFillSampleData: () => void;
   onResetAllData: () => void;
+  onOpenGoogleSheetsModal: () => void;
+  isGoogleSheetsConnected: boolean;
   totalVotesCount: number;
   totalPledgesCount: number;
 }
@@ -21,6 +23,8 @@ export const Header: React.FC<HeaderProps> = ({
   onChangeClassTitle,
   onFillSampleData,
   onResetAllData,
+  onOpenGoogleSheetsModal,
+  isGoogleSheetsConnected,
   totalVotesCount,
   totalPledgesCount,
 }) => {
@@ -137,6 +141,29 @@ export const Header: React.FC<HeaderProps> = ({
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               <span className="hidden sm:inline">전체화면</span>
+            </button>
+
+            {/* Google Sheets Sync Button */}
+            <button
+              type="button"
+              onClick={() => {
+                playTapSound();
+                onOpenGoogleSheetsModal();
+              }}
+              className={`px-3 py-2 border rounded-xl text-xs font-bold font-jua flex items-center gap-1.5 transition-all shadow-xs active:scale-95 ${
+                isGoogleSheetsConnected
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
+              }`}
+              title="구글 스프레드시트(액셀) 실시간 연동"
+            >
+              <FileSpreadsheet className={`w-4 h-4 ${isGoogleSheetsConnected ? 'text-emerald-600' : 'text-slate-500'}`} />
+              <span className="hidden sm:inline">구글 시트 연동</span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isGoogleSheetsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                }`}
+              />
             </button>
 
             {/* Demo Teacher Helpers */}

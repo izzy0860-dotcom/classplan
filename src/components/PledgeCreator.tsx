@@ -34,7 +34,7 @@ export const PledgeCreator: React.FC<PledgeCreatorProps> = ({
   onSavePledge,
   existingPledges,
   onGoToWall,
-  totalStudentsCount = 25,
+  totalStudentsCount = 21,
 }) => {
   const currentCard = cards.find((c) => c.id === targetCardId) || cards[0];
 
